@@ -1,5 +1,6 @@
 #include <iostream>
 #include <vector>
+#include <unordered_map>
 #include <cmath>
 #include <SFML/Graphics.hpp>
 #include <SFML/Window.hpp>
@@ -58,7 +59,7 @@ public:
 
     const Vector2 operator+(const Vector2& rhs) const
     {
-        return Vector2({x + rhs.x, y + rhs.y, w + rhs.w});
+        return Vector2({x + rhs.x, y + rhs.y});
     }
 private:
     //float values[3];
@@ -127,7 +128,21 @@ public:
 
     const Vector3 operator+(const Vector3& rhs) const
     {
-        return Vector3({x + rhs.x, y + rhs.y, z + rhs.z, w + rhs.w});
+        return Vector3({x + rhs.x, y + rhs.y, z + rhs.z});
+    }
+
+    const Vector3 operator-(const Vector3& rhs) const
+    {
+        return Vector3({x - rhs.x, y - rhs.y, z - rhs.z});
+    }
+
+    float length() {
+        return sqrt(x * x + y * y + z * z);
+    }
+
+    Vector3 normalized() {
+        float l = length();
+        return Vector3({x / l, y / l, z / l});
     }
 
     float dot(Vector3 other) {
@@ -608,6 +623,7 @@ int main(int argc, char *argv[])
         }*/
 
         std::vector<Vector3> vertices;
+        std::unordered_map<unsigned int, bool> fronts;
         vertices.reserve(meshes[0].vertices.size());
         for(Vertex vertex : meshes[0].vertices){
             Vector3 v = yr * vertex.position;
@@ -620,9 +636,23 @@ int main(int argc, char *argv[])
 
         for(auto it = vertices.begin();it != vertices.end();it++){
             (*it) = view * (*it);
+
             (*it) = perspectiveProjection * (*it);
             (*it).dehomogenize();
-
+        }
+        for(unsigned int i = 0;i < meshes[0].indices.size();i+=3){
+            unsigned int index1 = meshes[0].indices[i];
+            unsigned int index2 = meshes[0].indices[i+1];
+            unsigned int index3 = meshes[0].indices[i+2];
+            Vector3 a = vertices[index1] - vertices[index2];
+            Vector3 b = vertices[index1] - vertices[index3];
+            Vector3 normal = b.cross(a);
+            Vector3 eye = vertices[index1] - camera.position;
+            float d = normal.dot(eye);
+            bool frontFacing = d > 0;
+            fronts[i] = frontFacing;
+        }
+        for(auto it = vertices.begin();it != vertices.end();it++){
             (*it) = screenProjection * (*it);
         }
 
@@ -634,9 +664,12 @@ int main(int argc, char *argv[])
             unsigned int index1 = meshes[0].indices[i];
             unsigned int index2 = meshes[0].indices[i+1];
             unsigned int index3 = meshes[0].indices[i+2];
-            drawLine(Vector2({vertices[index1].x, vertices[index1].y}), Vector2({vertices[index2].x, vertices[index2].y}));
-            drawLine(Vector2({vertices[index2].x, vertices[index2].y}), Vector2({vertices[index3].x, vertices[index3].y}));
-            drawLine(Vector2({vertices[index3].x, vertices[index3].y}), Vector2({vertices[index1].x, vertices[index1].y}));
+            bool frontFacing = fronts[i];
+            if(frontFacing){
+                drawLine(Vector2({vertices[index1].x, vertices[index1].y}), Vector2({vertices[index2].x, vertices[index2].y}));
+                drawLine(Vector2({vertices[index2].x, vertices[index2].y}), Vector2({vertices[index3].x, vertices[index3].y}));
+                drawLine(Vector2({vertices[index3].x, vertices[index3].y}), Vector2({vertices[index1].x, vertices[index1].y}));
+            }
             
         }
         

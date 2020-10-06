@@ -130,6 +130,14 @@ public:
         return Vector3({x + rhs.x, y + rhs.y, z + rhs.z, w + rhs.w});
     }
 
+    float dot(Vector3 other) {
+        return x * other.x + y * other.y + z * other.z;
+    }
+
+    Vector3 cross(Vector3 other){
+        return Vector3({y * other.z - z * other.y, z * other.x - x * other.z, x * other.y - y * other.x});
+    }
+
     void dehomogenize(){
         x /= w;
         y /= w;
@@ -610,19 +618,13 @@ int main(int argc, char *argv[])
             std::cout << "rotated vertex = " << vertex.x << "," << vertex.y << "," << vertex.z << std::endl;
         }*/
 
-        std::vector<Vector3> projectedVertices;
-        projectedVertices.reserve(vertices.size());
-        for(Vector3 v : vertices){
-            v = view * v;
-            v = perspectiveProjection * v;
-            v.dehomogenize();
+        for(auto it = vertices.begin();it != vertices.end();it++){
+            (*it) = view * (*it);
+            (*it) = perspectiveProjection * (*it);
+            (*it).dehomogenize();
 
-            v = screenProjection * v;
-
-            projectedVertices.push_back(v);
+            (*it) = screenProjection * (*it);
         }
-
-        vertices = projectedVertices;
 
         /*for(Vector3 vertex : vertices){
             std::cout << "projected vertex = " << vertex.x << "," << vertex.y << "," << vertex.z << std::endl;

@@ -3,6 +3,9 @@
 #include <cmath>
 #include <SFML/Graphics.hpp>
 #include <SFML/Window.hpp>
+#include <assimp/Importer.hpp>
+#include <assimp/scene.h>
+#include <assimp/postprocess.h>
 
 class Vector2 {
 public:
@@ -125,6 +128,13 @@ public:
     const Vector3 operator+(const Vector3& rhs) const
     {
         return Vector3({x + rhs.x, y + rhs.y, z + rhs.z, w + rhs.w});
+    }
+
+    void dehomogenize(){
+        x /= w;
+        y /= w;
+        z /= w;
+        w /= w;
     }
 private:
     //float values[4];
@@ -315,8 +325,44 @@ public:
     };
 };
 
+class Camera {
+public:
+    Camera(const Vector3& position, const Vector3& rotation){
+        this->position = position;
+        this->rotation = rotation;
+    }
+    Vector3 position;
+    Vector3 rotation;
+};
+
+class Vertex {
+public:
+    Vertex(){
+        
+    }
+    Vertex(Vector3 position, Vector3 normal, Vector2 tex_coords){
+        this->position = position;
+        this->normal = normal;
+        this->tex_coords = tex_coords;
+    }
+    Vector3 position;
+    Vector3 normal;
+    Vector2 tex_coords;
+};
+
+class Mesh {
+public:
+    Mesh(std::vector<Vertex> vertices, std::vector<unsigned int> indices) {
+        this->vertices = vertices;
+        this->indices = indices;
+    }
+    std::vector<Vertex> vertices;
+    std::vector<unsigned int> indices;
+};
+
 Vector2 size{800, 600};
 sf::Image image;
+std::vector<Mesh> meshes;
 
 void setPixel(const int x, const int y, const sf::Color color) {
     if(x < 0 || y < 0 || x > size.width || y > size.height) return;
@@ -381,45 +427,95 @@ void drawLine(const Vector2 start, const Vector2 end) {
     }
 }
 
+// TODO : Optimize
+/*vector<Texture> loadMaterialTextures(aiMaterial *material, aiTextureType type, const std::string directory){
+    vector<Texture> textures;
+    for(unsigned int i = 0;i < material->GetTextureCount(type);i++){
+        aiString str;
+        mat->GetTexture(type, i, &str);
+        Texture texture;
+        texture.id = textureFromFile(str.C_Str(), directory);
+        texture.type = type;
+        texture.path = str;
+        textures.push_back(texture);
+    }
+    return textures;
+}*/
+
+Mesh processMesh(aiMesh *mesh, const aiScene *scene, const std::string& directory) {
+    std::vector<Vertex> vertices;
+    std::vector<unsigned int> indices;
+    //vector<Texture> textures;
+    for(unsigned int i = 0;i < mesh->mNumVertices;i++){
+        Vertex vertex;
+
+        Vector3 pos;
+        pos.x = mesh->mVertices[i].x;
+        pos.y = mesh->mVertices[i].y;
+        pos.z = mesh->mVertices[i].z;
+        vertex.position = pos;
+
+        Vector3 normal;
+        normal.x = mesh->mNormals[i].x;
+        normal.y = mesh->mNormals[i].y;
+        normal.z = mesh->mNormals[i].z;
+        vertex.normal = normal;
+
+        if(mesh->mTextureCoords[0]){
+            Vector2 texCoords;
+            texCoords.x = mesh->mTextureCoords[0][i].x;
+            texCoords.y = mesh->mTextureCoords[0][i].y;
+            vertex.tex_coords = texCoords;
+        }else{
+            Vector2 texCoords{0.0f, 0.0f};
+            vertex.tex_coords = texCoords;
+        }
+
+        vertices.push_back(vertex);
+    }
+    for(unsigned int i = 0;i < mesh->mNumFaces;i++){
+        aiFace face = mesh->mFaces[i];
+        for(unsigned int j = 0;j < face.mNumIndices;j++){
+            indices.push_back(face.mIndices[j]);
+        }
+    }
+    /*if(mesh->mMaterialIndex >= 0){
+        aiMaterial *material = scene->mMaterials[mesh->mMaterialIndex];
+        vector<Texture> diffuse = loadMaterialTextures(material, aiTextureType_DIFFUSE, directory);
+        textures.insert(textures.end(), diffuse.begin(), diffuse.end());
+        vector<Texture> specular = loadMaterialTextures(material, aiTextureType_SPECULAR, directory);
+        textures.insert(textures.end(), specular.begin(), specular.end());
+    }*/
+    return Mesh(vertices, indices);//, textures);
+}
+
+void processNode(aiNode *node, const aiScene *scene, const std::string & directory) {
+    for(unsigned int i = 0;i < node->mNumMeshes;i++){
+        aiMesh *mesh = scene->mMeshes[node->mMeshes[i]];
+        meshes.push_back(processMesh(mesh, scene, directory));
+    }
+    for(unsigned int i = 0;i < node->mNumChildren;i++){
+        processNode(node->mChildren[i], scene, directory);
+    }
+}
+
+void loadModel(const std::string& path) {
+    Assimp::Importer importer;
+    const aiScene *scene = importer.ReadFile(path, aiProcess_Triangulate | aiProcess_FlipUVs);
+
+    if(!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) 
+    {
+        std::cout << "ERROR: assimp: " << importer.GetErrorString() << std::endl;
+        return;
+    }
+    std::string directory = path.substr(0, path.find_last_of('/'));
+
+    processNode(scene->mRootNode, scene, directory);
+}
+
 int main(int argc, char *argv[])
 {
-    /*Vector2 a({1, 2});
-	Vector2 b({3, 4});
-
-	std::cout << "a = " << a.x << "," << a.y << std::endl;
-	std::cout << "b = " << b.x << "," << b.y << std::endl;
-
-	Vector2 c = a + b;
-	Vector2 d = c;
-
-	std::cout << "c = " << c.x << "," << c.y << std::endl;
-	std::cout << "d = " << d.x << "," << d.y << std::endl;
-
-    return 0;*/
-
-    /*std::vector<Vector2> vs;
-    vs.push_back(Vector2({-25, -25, 1}));
-    vs.push_back(Vector2({25, -25, 1}));
-    vs.push_back(Vector2({25, 25, 1}));
-    vs.push_back(Vector2({-25, 25, 1}));
-
-    Matrix2 t{
-        {1, 0, 5},
-        {0, 1, 5},
-        {0, 0, 1}
-    };
-    std::vector<Vector2> v;
-    for(auto vert : vs) {
-        v.push_back(t*vert);
-    }
-
-    for(auto vert : v) {
-        std::cout << "vert = " << vert.x << "," << vert.y << "," << vert.w << std::endl;
-    }
-
-    return 0;*/
-
-    sf::RenderWindow window(sf::VideoMode(size.width, size.height, 32), "Pixel Test");
+    sf::RenderWindow window(sf::VideoMode(size.width, size.height, 32), "Software Renderer");
     
     image.create(size.width, size.height, sf::Color());
     
@@ -429,25 +525,42 @@ int main(int argc, char *argv[])
     sf::Sprite sprite;
     sprite.setTexture(texture);
 
-    std::vector<Vector3> verts;
-    verts.push_back(Vector3({-25, -25, 0, 1}));
-    verts.push_back(Vector3({25, -25, 0, 1}));
-    verts.push_back(Vector3({25, 25, 0, 1}));
-    verts.push_back(Vector3({-25, 25, 0, 1}));
+    Camera camera(Vector3{0.0f, 0.0f, -50.0f}, Vector3{0.0f, 0.0f, 0.0f});
 
-    while(window.isOpen())
-    {
+    loadModel("cube.md2");
+
+    while(window.isOpen()){
         sf::Event event;
         
-        while (window.pollEvent(event))
-        {
+        while (window.pollEvent(event)){
             if (event.type == sf::Event::Closed) {
                 window.close();
             }
         }
 
+        float d = 1.0f;
+        float a = size.width / size.height;
+
+        Matrix3 view = {
+            {1, 0, 0, -camera.position.x},
+            {0, 1, 0, -camera.position.y},
+            {0, 0, 1, -camera.position.z},
+            {0, 0, 0, 1}};
+
+        Matrix3 perspectiveProjection = {
+            {d/a, 0, 0, 0},
+            {0, d, 0, 0},
+            {0, 0, d, 0},
+            {0, 0, 1, 0}};
+
+        Matrix3 screenProjection = {
+            {size.width/2, 0, 0, size.width/2},
+            {0, -size.height/2, 0, size.height/2},
+            {0, 0, d/2, d/2},
+            {0, 0, 0, 1}};
+
         clear();
-        //setPixel(10, 10, sf::Color(255, 0, 0, 255));
+        
         static float degrees = 0.0f;
         degrees += 0.1f;
         float radians = degrees * M_PI / 180.0f;
@@ -481,14 +594,49 @@ int main(int argc, char *argv[])
             {0, 0, 1, 0},
             {0, 0, 0, 1}
         };
-        std::vector<Vector3> v;
-        for(auto vert : verts) {
-            v.push_back(t*zr*vert);
+
+        /*for(Vertex vertex : meshes[0].vertices){
+            std::cout << "vertex = " << vertex.position.x << "," << vertex.position.y << "," << vertex.position.z << std::endl;
+        }*/
+
+        std::vector<Vector3> vertices;
+        vertices.reserve(meshes[0].vertices.size());
+        for(Vertex vertex : meshes[0].vertices){
+            Vector3 v = yr * vertex.position;
+            vertices.push_back(v);
         }
-        for(int i = 0;i < v.size()-1;i++){
-            drawLine(Vector2({v[i].x, v[i].y}), Vector2({v[i+1].x, v[i+1].y}));
+
+        /*for(Vector3 vertex : vertices){
+            std::cout << "rotated vertex = " << vertex.x << "," << vertex.y << "," << vertex.z << std::endl;
+        }*/
+
+        std::vector<Vector3> projectedVertices;
+        projectedVertices.reserve(vertices.size());
+        for(Vector3 v : vertices){
+            v = view * v;
+            v = perspectiveProjection * v;
+            v.dehomogenize();
+
+            v = screenProjection * v;
+
+            projectedVertices.push_back(v);
         }
-        drawLine(Vector2({v[3].x, v[3].y}), Vector2({v[0].x, v[0].y}));
+
+        vertices = projectedVertices;
+
+        /*for(Vector3 vertex : vertices){
+            std::cout << "projected vertex = " << vertex.x << "," << vertex.y << "," << vertex.z << std::endl;
+        }*/
+
+        for(unsigned int i = 0;i < meshes[0].indices.size();i+=3){
+            unsigned int index1 = meshes[0].indices[i];
+            unsigned int index2 = meshes[0].indices[i+1];
+            unsigned int index3 = meshes[0].indices[i+2];
+            drawLine(Vector2({vertices[index1].x, vertices[index1].y}), Vector2({vertices[index2].x, vertices[index2].y}));
+            drawLine(Vector2({vertices[index2].x, vertices[index2].y}), Vector2({vertices[index3].x, vertices[index3].y}));
+            drawLine(Vector2({vertices[index3].x, vertices[index3].y}), Vector2({vertices[index1].x, vertices[index1].y}));
+            
+        }
         
         texture.loadFromImage(image);
         window.draw(sprite);

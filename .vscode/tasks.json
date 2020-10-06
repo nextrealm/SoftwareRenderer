@@ -12,7 +12,8 @@
 				"main",
 				"-lsfml-graphics",
 				"-lsfml-window",
-				"-lsfml-system"
+				"-lsfml-system",
+				"-lassimp"
 			],
 			/*"options": {
 				"cwd": "${workspaceFolder}"
